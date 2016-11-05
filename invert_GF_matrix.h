@@ -1,0 +1,1 @@
+extern int inv(unsigned char *p,int n);
