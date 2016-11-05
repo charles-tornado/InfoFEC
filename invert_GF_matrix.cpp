@@ -22,11 +22,6 @@ int inv(unsigned char *p,int n)
   js=(int *)malloc(n*sizeof(int));
   for (i = 0; i < n*n; i++){
 	  c[i] = p[i];
-	  //if (p[i] == 0)
-	  //{
-		 // printf(" 出现问题啦  %02x", p[i]);
-		 // system("pause");
-	  //}
   }
   for(k=0;k<n;k++)
    {
@@ -45,14 +40,7 @@ int inv(unsigned char *p,int n)
        {  
 		 free(is);
 		 free(js);
-		 //for (i = 0; i < n*n; i++){
-			// printf("  %02x", c[i]);
-		 //}
-		 //printf("\n");
-		 //for (i = 0; i < n*n; i++){
-			// printf("  %02x", p[i]);
-		 //}
-   //    printf("     no inv\n");
+ //        printf("     no inv\n");
          return(0);
        }
     if((i=is[k])!=k)

@@ -19,9 +19,9 @@ int arc_table[256];
 int inverse_table[256];
 
 namespace {
-	const std::string original_file("1.rmvb");
-	const std::string encrypted_file("22.rmvb");
-	const std::string decrypted_file("33.rmvb");
+	const std::string original_file("1.jpg");
+	const std::string encrypted_file("22.jpg");
+	const std::string decrypted_file("33.jpg");
 
 	const int k = 3;
 	const int n = 4;
@@ -189,21 +189,21 @@ unsigned char * coefficient_matrix(long *bij, long h){
 	{
 		a_ij[i] = abs((bij[i]^h)%256) ;//系数矩阵取8位  0-255
 	}
-	for (i = 0; i < k*k; i++){
-		c[i] = a_ij[i];
-	}
-	int count = 1;
-	while (!inv(c, k))
-	{
-		for (i = 0; i < n*k; i++)
-		{
-			a_ij[i] = abs((bij[i] ^ h) % 128)+count;//系数矩阵取8位  0-255
-		}
-		for (i = 0; i < k*k; i++){
-			c[i] = a_ij[i];
-		}
-		count++;
-	}
+	//for (i = 0; i < k*k; i++){
+	//	c[i] = a_ij[i];
+	//}
+	//int count = 1;
+	//while (!inv(c, k))
+	//{
+	//	for (i = 0; i < n*k; i++)
+	//	{
+	//		a_ij[i] = abs((bij[i] ^ h) % 128)+count;//系数矩阵取8位  0-255
+	//	}
+	//	for (i = 0; i < k*k; i++){
+	//		c[i] = a_ij[i];
+	//	}
+	//	count++;
+	//}
 
 
 	return a_ij;
@@ -267,19 +267,35 @@ void Decrypt(long * keys){
 
 
 	groups = ceil((float)length / (n*bytes));
-	//此处假设收到的为n个包中的前k个包
+	
 	for (g = 0; g < groups; g++){
 		h = parameter_h(keys, ID, g);
 		a_ij = coefficient_matrix(bij, h);
-		for (i = 0; i < k*k; i++){
-			c[i] = a_ij[i];
 
-		}
-
-
-		inv(c, k);
-
+		int *receive_id = (int*)malloc(sizeof(int)*k);
+		memset(receive_id, 0, sizeof(int)*k);
 		memset(recover_data, 0, sizeof(unsigned char)*bytes*k);
+		int count = 0;
+		do
+		{
+			for (i = 0; i < k; i++)
+			{
+				//初始假设收到的为n个包中的前k个包
+				receive_id[i] = (i+count)%n+1;
+
+			}
+			for (i = 0; i<k; i++)
+			{
+				for (j = 0; j<k; j++)
+				{
+					c[i*k + j] = a_ij[(receive_id[i] - 1)*k + j];
+				}
+
+			}
+			count++;
+
+		} while (!inv(c, k));
+
 
 		for (l = 0; l<k; l++)
 		{
@@ -287,13 +303,15 @@ void Decrypt(long * keys){
 			{
 				for (i = 0; i<k; i++)
 				{
-					recover_data[l*bytes + j] ^= mul(c[l*k + i], buffer[g*n*bytes + i*bytes + j]);
-					
+					recover_data[l*bytes + j] ^= mul(c[l*k + i], buffer[g*n*bytes + (receive_id[i] - 1)*bytes + j]);
+
 				}
 				recover_data[l*bytes + j] = recover_data[l*bytes + j];
 			}
 
-		}	
+		}
+
+
 		outfile.write((char *)recover_data, bytes*k);	
 	}
 	outfile.close();
