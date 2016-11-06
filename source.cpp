@@ -19,9 +19,9 @@ int arc_table[256];
 int inverse_table[256];
 
 namespace {
-	const std::string original_file("1.jpg");
-	const std::string encrypted_file("22.jpg");
-	const std::string decrypted_file("33.jpg");
+	const std::string original_file("1.rmvb");
+	const std::string encrypted_file("2.rmvb");
+	const std::string decrypted_file("3.rmvb");
 
 	const int k = 3;
 	const int n = 4;
@@ -189,23 +189,6 @@ unsigned char * coefficient_matrix(long *bij, long h){
 	{
 		a_ij[i] = abs((bij[i]^h)%256) ;//系数矩阵取8位  0-255
 	}
-	//for (i = 0; i < k*k; i++){
-	//	c[i] = a_ij[i];
-	//}
-	//int count = 1;
-	//while (!inv(c, k))
-	//{
-	//	for (i = 0; i < n*k; i++)
-	//	{
-	//		a_ij[i] = abs((bij[i] ^ h) % 128)+count;//系数矩阵取8位  0-255
-	//	}
-	//	for (i = 0; i < k*k; i++){
-	//		c[i] = a_ij[i];
-	//	}
-	//	count++;
-	//}
-
-
 	return a_ij;
 }
 
@@ -363,7 +346,7 @@ int main() {
 	start = clock();
 
 //	copy();
-//	Enrypted(keys);
+	Enrypted(keys);
 	Decrypt(keys);
 	
 	end = clock();
