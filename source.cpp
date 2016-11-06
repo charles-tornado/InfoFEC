@@ -6,11 +6,22 @@
 #include <iterator>  // for std::istreambuf_iterator
 #include <string>
 #include <sstream>
+#include <cstring>
+#include <cstringt.h>
 #include <time.h>
 #include "invert_GF_matrix.h"
-
-
-#define MX (z>>5^y<<2) + (y>>3^z<<4)^(sum^y) + (k[p&3^e]^z);
+#ifdef _MSC_VER
+#  pragma warning(push)
+#  pragma warning(disable: 4100 4127 4189 4244)
+#endif
+#include "cryptopp/aes.h"
+#include "cryptopp/config.h"
+#include "cryptopp/files.h"
+#include "cryptopp/filters.h"
+#include "cryptopp/modes.h"
+#ifdef _MSC_VER
+#  pragma warning(pop)
+#endif
 
 using namespace std;
 
@@ -26,21 +37,20 @@ namespace {
 	const int k = 3;
 	const int n = 4;
 	const int bytes = 16;
-    long ID = 0x01000001;//IP地址为1.0.0.1
+
 	int i, j, l, g;//循环系数	
 	int groups;//总的组数
 	long groups_seqence = 0;//groups号
 	int groups_bytes = bytes*k;
-	long h;//编码参量
 
-	long *bij = (long*)malloc(sizeof(long)*n*k);//系数矩阵的基础值
+	const int key_size(CryptoPP::AES::DEFAULT_KEYLENGTH);
+	const int iv_size(CryptoPP::AES::BLOCKSIZE);
+
+
 	unsigned char *a_ij = (unsigned char*)malloc(sizeof(unsigned char)*n*k);//系数矩阵
-	unsigned char *xi = (unsigned char*)malloc(sizeof(unsigned char)*bytes);
-	double *a_ij_invert = (double*)malloc(sizeof(double)*k*k);
-	long *decrypt = (long*)malloc(sizeof(long)*n*k);
-	unsigned char *c = (unsigned char *)malloc(sizeof(unsigned char)* k*k);
+	unsigned char *xi = (unsigned char*)malloc(sizeof(unsigned char)*bytes);//每个数据包的元素（bytes个字节）
 	unsigned char *recover_data = (unsigned char*)malloc(sizeof(unsigned char)*bytes*k);
-
+	unsigned char *c = (unsigned char *)malloc(sizeof(unsigned char)* k*k);//逆矩阵
 }
 
 int mul(int x, int y)
@@ -51,93 +61,20 @@ int mul(int x, int y)
 	return table[(arc_table[x] + arc_table[y]) % 255];
 }
 
-
-
-//XXTEA-128算法作为加密函数G，加密函数的输入为128位的二进制串，即bytes字节的数据
-long btea(long *v, long n, long *k)
-{
-	unsigned long z = v[n - 1], y = v[0], sum = 0, e, DELTA = 0x9e3779b9;
-	long p, q;
-
-	if (n > 1)
-	{				/* 加密过程 */
-		q = 6 + 52 / n;
-		while (q-- > 0)
-		{
-			sum += DELTA;
-			e = (sum >> 2) & 3;
-
-			for (p = 0; p < n - 1; p++)
-				y = v[p + 1], z = v[p] += MX;
-
-			y = v[0];
-			z = v[n - 1] += MX;
-		}
-		return 0;
-	}
-	else if (n < -1)
-	{				/* 解密过程 */
-		n = -n;
-		q = 6 + 52 / n;
-		sum = q * DELTA;
-
-		while (sum != 0)
-		{
-			e = (sum >> 2) & 3;
-
-			for (p = n - 1; p > 0; p--)
-				z = v[p - 1], y = v[p] -= MX;
-
-			z = v[n - 1];
-			y = v[0] -= MX;
-			sum -= DELTA;
-		}
-		return 0;
-	}
-	return 1;
-}
-
-
-void copy(){
-	//1st method
-	//std::ifstream infile(original_file.c_str(), std::ios::binary);
-	//const std::string plaintext((std::istreambuf_iterator<char>(infile)),
-	//std::istreambuf_iterator<char>());
-	//infile.close();
-
-
-
-	//2nd method
-	//std::ifstream t(original_file.c_str(), std::ios::binary);
-	//std::stringstream buffer;
-	//buffer << t.rdbuf();
-	//std::string plaintext(buffer.str());
-	//t.close();
-
-	//3rd method
-	std::ifstream t;
-	int length;
-	t.open(original_file.c_str(), std::ios::binary);      // open input file  
-	t.seekg(0, std::ios::end);    // go to the end  
-	length = t.tellg();           // report location (this is the length)  
-	t.seekg(0, std::ios::beg);    // go back to the beginning  
-	char * buffer = new char[length];    // allocate memory for a buffer of appropriate dimension  
-	t.read(buffer, length);       // read the whole file into the buffer  
-	t.close();                    // close file handle  
-
-//	std::ofstream outfile(encrypted_file.c_str(), std::ios::binary);
-	std::ofstream outfile;
-	outfile.open(encrypted_file.c_str(), ofstream::app|ofstream::binary);
-	//outfile.write(plaintext.c_str(), plaintext.size());
-	outfile.write(buffer, length);
-	outfile.close();
-
-}
-
+void GetKeyAndIv(byte* key, byte* iv) {
+	HW_PROFILE_INFOA profile;
+	GetCurrentHwProfileA(&profile);
+	char* guid(profile.szHwProfileGuid);
+	assert(std::char_traits<char>::length(guid) >= key_size + iv_size);
+	// Assign first 'key_size' chars of GUID to 'key'
+	std::copy(guid, guid + key_size, key);
+	// Assign next 'iv_size' chars of GUID to 'iv'
+	std::copy(guid + key_size, guid + key_size + iv_size, iv);
+};
 
 unsigned char * padding(unsigned char * buffer, int length){
 
-	groups = ceil( (float)length / groups_bytes );
+	groups = ceil((float)length / groups_bytes);
 	int remainder_bytes = length % groups_bytes;
 	if (remainder_bytes != 0)
 	{
@@ -149,111 +86,63 @@ unsigned char * padding(unsigned char * buffer, int length){
 	return buffer;
 
 }
-
-long* coefficient_matrix_basic(long * keys, int k, int n){
-	long *G_parameters = (long*)malloc(sizeof(long)*n*k);
-	long *encrypt = (long*)malloc(sizeof(long)*n*k);
-	for (i = 0; i<n; i++)
+void initialize_FEC_coefficient_matrix(int k, int n){
+	memset(a_ij, 0, sizeof(unsigned char)*n*k);
+	for ( i = 0; i < k; i++)
 	{
-		for (j = 0; j<k; j++)
-		{
-			*(G_parameters + (i*k + j)) = i*n + j;
-		}
-
+		a_ij[i*k+i] = 1;
 	}
-
-	for (i = 0; i < n*k; i++){
-		encrypt[i] = G_parameters[i];
-	}
-	btea(encrypt, n*k, keys);
-
-	for (i = 0; i < n*k; i++){
-		bij[i] = encrypt[i];
-	}
-	free(G_parameters);
-	free(encrypt);
-	return bij;
-
-}
-
-long parameter_h(long * keys, long ID, long groups_seqence){
-
-	long h_paramater[2] = { ID + groups_seqence, ID + groups_seqence };
-	btea(h_paramater, 2, keys);
-	h = h_paramater[0];
-	return h;
-}
-
-unsigned char * coefficient_matrix(long *bij, long h){
-	for (i = 0; i < n*k; i++)
+	unsigned char *b = (unsigned char*)malloc(sizeof(unsigned char)*(k+1)*k);//用于构造系数矩阵的模块
+	memset(b, 1, sizeof(unsigned char)*(k+1)*k);
+	for ( i = 0; i < k; i++)
 	{
-		a_ij[i] = abs((bij[i]^h)%256) ;//系数矩阵取8位  0-255
+		b[k + i*k + i] = 0;
 	}
-	return a_ij;
+
+	for ( i = k*k, j = 0; i < n*k; i++, j++)
+	{
+		a_ij[i] = b[j%((k+1)*k)];
+	}
+	free(b);
 }
 
-
-void Enrypted(long * keys){
-	std::ifstream t;
-	int length;
-	t.open(original_file.c_str(), std::ios::binary);      // open input file  
-	t.seekg(0, std::ios::end);    // go to the end  
-	length = t.tellg();           // report location (this is the length)  
-	t.seekg(0, std::ios::beg);    // go back to the beginning  
-	unsigned char * buffer = new unsigned char[length];    // allocate memory for a buffer of appropriate dimension  
-	t.read((char *)buffer, length);       // read the whole file into the buffer  
-	t.close();                    // close file handle  
-
+void FEC_encode(const char *origin_text,int length){
 	std::ofstream outfile;
 	outfile.open(encrypted_file.c_str(), ofstream::app | ofstream::out | ofstream::binary);//create output file
 
-	//unsigned char buffer[] = "A safe and reliable coding method!             A safe and reliable coding method!";
-	//int length = strlen((char *)buffer);
-
-	unsigned char* str = padding(buffer, length);
+	unsigned char* str = padding((unsigned char*)origin_text, length);
 	memset(xi, 0, sizeof(unsigned char)*bytes);
+
 	for (g = 0; g < groups; g++){
 
-		h = parameter_h(keys, ID, g);
-		a_ij = coefficient_matrix(bij, h);
-		for ( l = 0; l < n; l++)
+		for (l = 0; l < n; l++)
 		{
-			for ( j = 0; j < bytes; j++)
+			for (j = 0; j < bytes; j++)
 			{
-				for ( i = 0; i < k; i++)
+				for (i = 0; i < k; i++)
 				{
 					xi[j] ^= mul(a_ij[i + l*k], str[g*groups_bytes + (i*bytes + j)]);// str 0-255
-				}							
+				}
 			}
 			outfile.write((const char *)xi, bytes);
 			memset(xi, 0, sizeof(unsigned char)*bytes);
-						
-		}			
-	}	
+
+		}
+	}
+
 	outfile.close();
 }
 
+void FEC_decode(char *encode_text, int *length){
+	int encode_length = *length;
+	char * buffer = new char[encode_length];
+	memcpy(buffer, encode_text, encode_length);
 
-void Decrypt(long * keys){
-	std::ifstream t;
-	int length;
-	t.open(encrypted_file.c_str(), std::ios::binary);      // open input file  
-	t.seekg(0, std::ios::end);    // go to the end  
-	length = t.tellg();           // report location (this is the length)  
-	t.seekg(0, std::ios::beg);    // go back to the beginning  
-	unsigned char * buffer = new unsigned char[length];    // allocate memory for a buffer of appropriate dimension  
-	t.read((char*)buffer, length);       // read the whole file into the buffer  
-	t.close();                    // close file handle  
+	groups = ceil((float)encode_length / (n*bytes));
 
-	std::ofstream outfile;
-	outfile.open(decrypted_file.c_str(), ofstream::app | ofstream::out | ofstream::binary);//create output file
+	memset(xi, 0, sizeof(unsigned char)*bytes);
 
-
-	groups = ceil((float)length / (n*bytes));
-	
 	for (g = 0; g < groups; g++){
-		h = parameter_h(keys, ID, g);
-		a_ij = coefficient_matrix(bij, h);
 
 		int *receive_id = (int*)malloc(sizeof(int)*k);
 		memset(receive_id, 0, sizeof(int)*k);
@@ -264,7 +153,7 @@ void Decrypt(long * keys){
 			for (i = 0; i < k; i++)
 			{
 				//初始假设收到的为n个包中的前k个包
-				receive_id[i] = (i+count)%n+1;
+				receive_id[i] = (i + count) % n + 1;
 
 			}
 			for (i = 0; i<k; i++)
@@ -293,10 +182,76 @@ void Decrypt(long * keys){
 			}
 
 		}
-
-
-		outfile.write((char *)recover_data, bytes*k);	
+		memcpy(encode_text + g*groups_bytes, recover_data, groups_bytes);
 	}
+	*length = groups * groups_bytes;
+	delete buffer;
+}
+
+
+void Encrypt() {
+	// Initialise the key and IV
+	byte key[key_size] = { 0 }, iv[iv_size] = { 0 };
+	GetKeyAndIv(key, iv);
+
+	std::ifstream t;
+	int length;
+	t.open(original_file.c_str(), std::ios::binary);      // open input file  
+	t.seekg(0, std::ios::end);    // go to the end  
+	length = t.tellg();           // report location (this is the length)  
+	t.seekg(0, std::ios::beg);    // go back to the beginning  
+	char * buffer = new char[length];    // allocate memory for a buffer of appropriate dimension  
+	t.read(buffer, length);       // read the whole file into the buffer  
+	t.close();                    // close file handle  
+
+
+
+	// Encrypt
+	CryptoPP::AES::Encryption cipher(key, key_size);
+	CryptoPP::CBC_Mode_ExternalCipher::Encryption encryption(cipher, iv);
+	std::string cipher_text;
+	CryptoPP::StreamTransformationFilter filter(encryption,
+		new CryptoPP::StringSink(cipher_text));
+	filter.Put(reinterpret_cast<const byte*>(buffer), length);
+	filter.MessageEnd();
+
+	//FEC_encode
+	FEC_encode(cipher_text.c_str(), cipher_text.size());
+
+}
+
+void Decrypt() {
+	// Initialise the key and IV
+	byte key[key_size] = { 0 }, iv[iv_size] = { 0 };
+	GetKeyAndIv(key, iv);
+
+	std::ifstream t;
+	int *length = new int;
+	*length = 0;
+	t.open(encrypted_file.c_str(), std::ios::binary);      // open input file  
+	t.seekg(0, std::ios::end);    // go to the end  
+	*length = t.tellg();           // report location (this is the length)  
+	t.seekg(0, std::ios::beg);    // go back to the beginning  
+	char * buffer = new char[*length];    // allocate memory for a buffer of appropriate dimension  
+	t.read(buffer, *length);       // read the whole file into the buffer  
+	t.close();                    // close file handle  
+
+
+	//FEC_decode
+	FEC_decode(buffer, length);
+
+	// Decrypt
+	CryptoPP::AES::Decryption cipher(key, key_size);
+	CryptoPP::CBC_Mode_ExternalCipher::Decryption decryption(cipher, iv);
+	std::string decrypted_test;
+	CryptoPP::StreamTransformationFilter filter(decryption,
+		new CryptoPP::StringSink(decrypted_test));
+	filter.Put(reinterpret_cast<const byte*>(buffer),*length);
+	filter.MessageEnd();
+
+	// Dump decrypted text
+	std::ofstream outfile(decrypted_file.c_str(), std::ios::binary);
+	outfile.write(decrypted_test.c_str(), decrypted_test.size());
 	outfile.close();
 }
 
@@ -332,28 +287,28 @@ void table_initialize(){
 }
 
 
-
-
 int main() {
-	long keys[] = { 0x5f4dcc3b, 0x5aa765d6, 0x1d8327de, 0xb882cf99 };
-
-	bij = coefficient_matrix_basic(keys, k, n);
 	table_initialize();
-
-	
+	initialize_FEC_coefficient_matrix(k, n);
 	clock_t start, end;
 	double totaltime;
-	start = clock();
+	try {
+		start = clock();
 
-//	copy();
-	Enrypted(keys);
-	Decrypt(keys);
-	
-	end = clock();
-	totaltime = (double)(end - start) / CLOCKS_PER_SEC;
-	cout << "此程序运行时间为" << totaltime << "秒！" << endl;
-	
-	cin.get();
+//		Encrypt();
+		Decrypt();
 
+
+		end = clock();
+		totaltime = (double)(end - start) / CLOCKS_PER_SEC;
+		cout << "此程序运行时间为" << totaltime << "秒！" << endl;
+
+
+		cin.get();
+	}
+	catch (const CryptoPP::Exception& exception) {
+		std::cout << "Caught exception: " << exception.what() << '\n';
+		return -1;
+	}
 	return 0;
 }

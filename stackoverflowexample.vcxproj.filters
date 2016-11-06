@@ -15,10 +15,10 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="invert_GF_matrix.cpp">
+    <ClCompile Include="source.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="source.cpp">
+    <ClCompile Include="invert_GF_matrix.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>
